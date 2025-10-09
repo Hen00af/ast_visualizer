@@ -2,39 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Minishell AST Visualizer</title>
+  <title>Minishell CFG Visualizer</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
   <link rel="stylesheet" href="style.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 </head>
 <body>
-  <div class="container">
-    <h1>🐚 Minishell AST Visualizer <span class="badge">42 Project</span></h1>
-    <div class="subtitle">Parse and visualize shell commands with mandatory & bonus syntax (&&, ||, parentheses)</div>
-    
-    <div class="input-section">
-      <div class="input-group">
-        <input type="text" id="cmd" placeholder="Enter a minishell command..." />
-        <button id="run">Parse & Visualize</button>
-      </div>
-      
-      <div class="example-section">
-        <span class="example-label">📋 Mandatory Examples:</span>
-        <div class="examples">
-          <button class="example-btn" data-cmd="echo hello world">echo hello world</button>
-          <button class="example-btn" data-cmd="cat file.txt | grep error">pipes</button>
-          <button class="example-btn" data-cmd="ls -la > output.txt">redirection</button>
-          <button class="example-btn" data-cmd="cat << EOF">heredoc</button>
-          <button class="example-btn" data-cmd="echo $USER $HOME">env variables</button>
-          <button class="example-btn" data-cmd="cat file.txt | grep -v test | sort >> out.txt">complex pipeline</button>
-        </div>
-      </div>
-
-      <div class="example-section">
-        <span class="example-label">⭐ Bonus Examples:</span>
-        <div class="examples">
-          <button class="example-btn bonus" data-cmd="make && make test">make && make test</button>
-          <button class="example-btn bonus" data-cmd="npm build || exit 1">npm build || exit 1</button>
-          <button class="example-btn bonus" data-cmd="(cd src && make)">( cd src && make )</button>
-          <button class="example-btn bonus" data-cmd="ls || (echo fail && exit)">nested operators</button>
-          <button class="example-btn bonus" data-cmd="cat file.txt && (grep error || echo
+  <h1>🧩 Minishell CFG Visualizer</h1>
+  <input id="cmd" placeholder="Enter shell command..." />
+  <button id="run">Visualize</button>
+  <svg id="tree" width="1000" height="700"></svg>
+  <script src="app.js"></script>
+</body>
+</html>
