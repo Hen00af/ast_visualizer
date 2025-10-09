@@ -1,88 +1,69 @@
-// Utility: find matching parenthesis range
-function extractSubshell(input) {
+function findTopLevelOperator(input, ops) {
   let depth = 0;
-  let start = -1;
   for (let i = 0; i < input.length; i++) {
-    if (input[i] === '(') {
-      if (depth === 0) start = i;
-      depth++;
-    } else if (input[i] === ')') {
-      depth--;
-      if (depth === 0 && start !== -1) {
-        return {
-          inner: input.slice(start + 1, i),
-          before: input.slice(0, start),
-          after: input.slice(i + 1)
-        };
+    if (input[i] === '(') depth++;
+    else if (input[i] === ')') depth--;
+    else if (depth === 0) {
+      for (const op of ops) {
+        if (input.startsWith(op, i)) {
+          return { index: i, op };
+        }
       }
     }
   }
-  return null; // no complete subshell found
+  return null;
 }
 
-// Recursive parser
 function parseCommand(input) {
   input = input.trim();
+  if (!input) return { type: "EMPTY" };
 
-  // Handle parentheses (subshell)
-  const sub = extractSubshell(input);
-  if (sub) {
-    // Handle operators outside the subshell first
-    const before = sub.before.trim();
-    const after = sub.after.trim();
-
-    const node = { type: "SUBSHELL", children: [parseCommand(sub.inner)] };
-
-    if (before) {
-      // If something exists before, combine logically (e.g. echo && (cat))
-      const combined = `${before} ${after ? ` ${after}` : ""}`.trim();
-      if (combined.includes("&&")) {
-        const [left, right] = combined.split("&&", 2);
-        return { type: "AND", children: [parseCommand(left), node] };
-      }
-      if (combined.includes("||")) {
-        const [left, right] = combined.split("||", 2);
-        return { type: "OR", children: [parseCommand(left), node] };
-      }
-      if (combined.includes("|")) {
-        const [left, right] = combined.split("|", 2);
-        return { type: "PIPE", children: [parseCommand(left), node] };
+  // 1️⃣ remove outer parentheses (e.g. "(a && b)" → "a && b")
+  if (input.startsWith("(") && input.endsWith(")")) {
+    let depth = 0;
+    let valid = true;
+    for (let i = 0; i < input.length; i++) {
+      if (input[i] === '(') depth++;
+      else if (input[i] === ')') depth--;
+      if (depth === 0 && i < input.length - 1) {
+        valid = false;
+        break;
       }
     }
-
-    if (after) {
-      // e.g. (cat) && echo done
-      if (after.startsWith("&&")) {
-        return { type: "AND", children: [node, parseCommand(after.slice(2))] };
-      }
-      if (after.startsWith("||")) {
-        return { type: "OR", children: [node, parseCommand(after.slice(2))] };
-      }
-      if (after.startsWith("|")) {
-        return { type: "PIPE", children: [node, parseCommand(after.slice(1))] };
-      }
-    }
-
-    return node;
+    if (valid) return parseCommand(input.slice(1, -1));
   }
 
-  // Handle logical AND/OR
-  if (input.includes("&&")) {
-    const [left, right] = input.split("&&", 2);
-    return { type: "AND", children: [parseCommand(left), parseCommand(right)] };
-  }
-  if (input.includes("||")) {
-    const [left, right] = input.split("||", 2);
-    return { type: "OR", children: [parseCommand(left), parseCommand(right)] };
-  }
-
-  // Handle pipe
-  if (input.includes("|")) {
-    const [left, right] = input.split("|", 2);
-    return { type: "PIPE", children: [parseCommand(left), parseCommand(right)] };
+  // 2️⃣ handle top-level && / ||
+  const logic = findTopLevelOperator(input, ["&&", "||"]);
+  if (logic) {
+    const left = input.slice(0, logic.index);
+    const right = input.slice(logic.index + logic.op.length);
+    return {
+      type: logic.op === "&&" ? "AND" : "OR",
+      children: [parseCommand(left), parseCommand(right)]
+    };
   }
 
-  // Handle redirection
+  // 3️⃣ handle top-level pipe
+  const pipe = findTopLevelOperator(input, ["|"]);
+  if (pipe) {
+    const left = input.slice(0, pipe.index);
+    const right = input.slice(pipe.index + 1);
+    return {
+      type: "PIPE",
+      children: [parseCommand(left), parseCommand(right)]
+    };
+  }
+
+  // 4️⃣ handle subshell
+  if (input.startsWith("(") && input.endsWith(")")) {
+    return {
+      type: "SUBSHELL",
+      children: [parseCommand(input.slice(1, -1))]
+    };
+  }
+
+  // 5️⃣ handle redirection
   const redirMatch = input.match(/(.*?)(<|>|>>|<<)\s*(\S+)/);
   if (redirMatch) {
     return {
@@ -92,6 +73,6 @@ function parseCommand(input) {
     };
   }
 
-  // Default simple command
+  // 6️⃣ default simple command
   return { type: "COMMAND", value: input };
 }
