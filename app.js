@@ -18,7 +18,29 @@ function parseCommand(input) {
   input = input.trim();
   if (!input) return { type: "EMPTY" };
 
-  // 1️⃣ remove outer parentheses (e.g. "(a && b)" → "a && b")
+  // 1️⃣ 最上位 (括弧外) の || または &&
+  const logic = findTopLevelOperator(input, ["||", "&&"]);
+  if (logic) {
+    const left = input.slice(0, logic.index);
+    const right = input.slice(logic.index + logic.op.length);
+    return {
+      type: logic.op === "&&" ? "AND" : "OR",
+      children: [parseCommand(left), parseCommand(right)]
+    };
+  }
+
+  // 2️⃣ パイプ
+  const pipe = findTopLevelOperator(input, ["|"]);
+  if (pipe) {
+    const left = input.slice(0, pipe.index);
+    const right = input.slice(pipe.index + 1);
+    return {
+      type: "PIPE",
+      children: [parseCommand(left), parseCommand(right)]
+    };
+  }
+
+  // 3️⃣ subshell (括弧の中)
   if (input.startsWith("(") && input.endsWith(")")) {
     let depth = 0;
     let valid = true;
@@ -30,40 +52,12 @@ function parseCommand(input) {
         break;
       }
     }
-    if (valid) return parseCommand(input.slice(1, -1));
+    if (valid) {
+      return { type: "SUBSHELL", children: [parseCommand(input.slice(1, -1))] };
+    }
   }
 
-  // 2️⃣ handle top-level && / ||
-  const logic = findTopLevelOperator(input, ["&&", "||"]);
-  if (logic) {
-    const left = input.slice(0, logic.index);
-    const right = input.slice(logic.index + logic.op.length);
-    return {
-      type: logic.op === "&&" ? "AND" : "OR",
-      children: [parseCommand(left), parseCommand(right)]
-    };
-  }
-
-  // 3️⃣ handle top-level pipe
-  const pipe = findTopLevelOperator(input, ["|"]);
-  if (pipe) {
-    const left = input.slice(0, pipe.index);
-    const right = input.slice(pipe.index + 1);
-    return {
-      type: "PIPE",
-      children: [parseCommand(left), parseCommand(right)]
-    };
-  }
-
-  // 4️⃣ handle subshell
-  if (input.startsWith("(") && input.endsWith(")")) {
-    return {
-      type: "SUBSHELL",
-      children: [parseCommand(input.slice(1, -1))]
-    };
-  }
-
-  // 5️⃣ handle redirection
+  // 4️⃣ リダイレクト
   const redirMatch = input.match(/(.*?)(<|>|>>|<<)\s*(\S+)/);
   if (redirMatch) {
     return {
@@ -73,6 +67,6 @@ function parseCommand(input) {
     };
   }
 
-  // 6️⃣ default simple command
+  // 5️⃣ 単純コマンド
   return { type: "COMMAND", value: input };
 }
