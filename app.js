@@ -1,14 +1,69 @@
-// Minimal AST builder for shell-like input
+// Utility: find matching parenthesis range
+function extractSubshell(input) {
+  let depth = 0;
+  let start = -1;
+  for (let i = 0; i < input.length; i++) {
+    if (input[i] === '(') {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (input[i] === ')') {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        return {
+          inner: input.slice(start + 1, i),
+          before: input.slice(0, start),
+          after: input.slice(i + 1)
+        };
+      }
+    }
+  }
+  return null; // no complete subshell found
+}
+
+// Recursive parser
 function parseCommand(input) {
   input = input.trim();
 
   // Handle parentheses (subshell)
-  const parenMatch = input.match(/\(([^()]*)\)/);
-  if (parenMatch) {
-    return {
-      type: "SUBSHELL",
-      children: [parseCommand(parenMatch[1])]
-    };
+  const sub = extractSubshell(input);
+  if (sub) {
+    // Handle operators outside the subshell first
+    const before = sub.before.trim();
+    const after = sub.after.trim();
+
+    const node = { type: "SUBSHELL", children: [parseCommand(sub.inner)] };
+
+    if (before) {
+      // If something exists before, combine logically (e.g. echo && (cat))
+      const combined = `${before} ${after ? ` ${after}` : ""}`.trim();
+      if (combined.includes("&&")) {
+        const [left, right] = combined.split("&&", 2);
+        return { type: "AND", children: [parseCommand(left), node] };
+      }
+      if (combined.includes("||")) {
+        const [left, right] = combined.split("||", 2);
+        return { type: "OR", children: [parseCommand(left), node] };
+      }
+      if (combined.includes("|")) {
+        const [left, right] = combined.split("|", 2);
+        return { type: "PIPE", children: [parseCommand(left), node] };
+      }
+    }
+
+    if (after) {
+      // e.g. (cat) && echo done
+      if (after.startsWith("&&")) {
+        return { type: "AND", children: [node, parseCommand(after.slice(2))] };
+      }
+      if (after.startsWith("||")) {
+        return { type: "OR", children: [node, parseCommand(after.slice(2))] };
+      }
+      if (after.startsWith("|")) {
+        return { type: "PIPE", children: [node, parseCommand(after.slice(1))] };
+      }
+    }
+
+    return node;
   }
 
   // Handle logical AND/OR
@@ -16,7 +71,6 @@ function parseCommand(input) {
     const [left, right] = input.split("&&", 2);
     return { type: "AND", children: [parseCommand(left), parseCommand(right)] };
   }
-
   if (input.includes("||")) {
     const [left, right] = input.split("||", 2);
     return { type: "OR", children: [parseCommand(left), parseCommand(right)] };
@@ -41,56 +95,3 @@ function parseCommand(input) {
   // Default simple command
   return { type: "COMMAND", value: input };
 }
-
-// Draw AST tree with D3.js
-function drawTree(ast) {
-  const svg = d3.select("#tree");
-  svg.selectAll("*").remove();
-
-  const width = +svg.attr("width");
-  const height = +svg.attr("height");
-
-  const root = d3.hierarchy(ast);
-  const tree = d3.tree().size([width - 100, height - 100]);
-  const nodes = tree(root);
-
-  // Links
-  svg.selectAll("line")
-    .data(nodes.links())
-    .enter()
-    .append("line")
-    .attr("x1", d => d.source.x + 50)
-    .attr("y1", d => d.source.y + 50)
-    .attr("x2", d => d.target.x + 50)
-    .attr("y2", d => d.target.y + 50)
-    .attr("stroke", "#555");
-
-  // Nodes
-  svg.selectAll("circle")
-    .data(nodes.descendants())
-    .enter()
-    .append("circle")
-    .attr("cx", d => d.x + 50)
-    .attr("cy", d => d.y + 50)
-    .attr("r", 25)
-    .attr("fill", "#238636");
-
-  // Labels
-  svg.selectAll("text")
-    .data(nodes.descendants())
-    .enter()
-    .append("text")
-    .attr("x", d => d.x + 50)
-    .attr("y", d => d.y + 55)
-    .attr("text-anchor", "middle")
-    .attr("fill", "white")
-    .text(d => d.data.value || d.data.type);
-}
-
-// Hook input
-document.getElementById("run").addEventListener("click", () => {
-  const cmd = document.getElementById("cmd").value;
-  if (!cmd) return;
-  const ast = parseCommand(cmd);
-  drawTree(ast);
-});
